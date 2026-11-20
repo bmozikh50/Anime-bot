@@ -1,0 +1,52 @@
+name: anime-bot
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: anime-bot
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: ffmpeg
+        run: |
+          command -v ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+
+      - name: deps
+        run: pip install --quiet --upgrade -r requirements.txt
+
+      - name: bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          OWNER_ID: ${{ vars.OWNER_ID }}
+          MAX_HEIGHT: ${{ vars.MAX_HEIGHT }}
+          MAX_RUNTIME: "19800"
+        run: python -u bot.py
+
+      - name: keepalive
+        run: |
+          if [ -f .keepalive ] && [ $(( $(date +%s) - $(date -r .keepalive +%s) )) -lt 86400 ]; then
+            echo "fresh"; exit 0
+          fi
+          date > .keepalive
+          git config user.name  "bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add .keepalive
+          git commit -m "keepalive $(date -u +%F)" || exit 0
+          git pull --rebase --autostash -q || true
+          git push -q || true
